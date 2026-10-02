@@ -125,7 +125,7 @@ func parseFlatYAML(raw []byte) (map[string]string, error) {
 }
 
 // unquoteYAMLScalar decodes one scalar token: double-quoted (with escapes),
-// single-quoted ('' escape), or plain (trailing " #" comment stripped).
+// single-quoted (” escape), or plain (trailing " #" comment stripped).
 func unquoteYAMLScalar(value string) (string, error) {
 	switch value[0] {
 	case '"':
