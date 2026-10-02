@@ -65,6 +65,8 @@ func handleManagement(request []byte) ([]byte, error) {
 	switch {
 	case req.Method == http.MethodGet && req.Path == managementRoutePath:
 		return okEnvelope(handleUsageStats(req.Query))
+	case req.Method == http.MethodGet && req.Path == resourceRoutePath:
+		return okEnvelope(htmlResponse(pageHTML))
 	default:
 		return okEnvelope(jsonResponse(http.StatusNotFound, map[string]string{"error": "not found"}))
 	}
@@ -210,5 +212,13 @@ func jsonResponse(status int, value any) managementResponse {
 		StatusCode: status,
 		Headers:    map[string][]string{"Content-Type": {"application/json; charset=utf-8"}},
 		Body:       body,
+	}
+}
+
+func htmlResponse(html string) managementResponse {
+	return managementResponse{
+		StatusCode: http.StatusOK,
+		Headers:    map[string][]string{"Content-Type": {"text/html; charset=utf-8"}},
+		Body:       []byte(html),
 	}
 }
