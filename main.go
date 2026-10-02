@@ -113,6 +113,8 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 	switch method {
 	case "plugin.register", "plugin.reconfigure":
 		return handleRegister(request)
+	case "usage.handle":
+		return handleUsage(request)
 	case "management.register":
 		return handleManagementRegister()
 	case "management.handle":
@@ -120,6 +122,17 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 	default:
 		return errorEnvelope("unknown_method", "unknown method: "+method), nil
 	}
+}
+
+// handleUsage decodes one usage record pushed by the host and folds it into
+// the aggregate.
+func handleUsage(request []byte) ([]byte, error) {
+	var rec UsageRecord
+	if errUnmarshal := json.Unmarshal(request, &rec); errUnmarshal != nil {
+		return errorEnvelope("invalid_request", "failed to decode usage record: "+errUnmarshal.Error()), nil
+	}
+	agg.Add(rec)
+	return okEnvelope(struct{}{})
 }
 
 func okEnvelope(result any) ([]byte, error) {
