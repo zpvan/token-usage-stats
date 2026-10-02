@@ -57,10 +57,10 @@ func registrationPayload() registration {
 	}
 }
 
-// applyConfig stores the new configuration. The aggregator is wired in here
-// in a later task.
+// applyConfig stores the new configuration and reconfigures the aggregator.
 func applyConfig(cfg pluginConfig) {
 	setConfig(cfg)
+	agg.configure(cfg)
 }
 
 func handleRegister(request []byte) ([]byte, error) {

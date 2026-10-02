@@ -215,3 +215,140 @@ func (a *Aggregator) Snapshot(from, to string) []DayData {
 	}
 	return out
 }
+
+const flushInterval = 30 * time.Second
+
+// configure applies a new plugin configuration: it loads retained days from
+// the data directory (days already in memory win), prunes expired data from
+// disk and memory, and starts the background flusher. In-memory data is
+// preserved across reconfiguration.
+func (a *Aggregator) configure(cfg pluginConfig) {
+	a.mu.Lock()
+	a.cfg = cfg
+	a.mu.Unlock()
+
+	a.loadFromDisk()
+	a.cleanupExpired()
+	a.startFlusher()
+}
+
+func (a *Aggregator) minRetentionDay() string {
+	a.mu.RLock()
+	cfg := a.cfg
+	a.mu.RUnlock()
+	return MinRetentionDay(a.nowFunc(), cfg.RetentionDays)
+}
+
+func (a *Aggregator) loadFromDisk() {
+	a.mu.RLock()
+	cfg := a.cfg
+	a.mu.RUnlock()
+	loaded, errLoad := LoadDays(cfg.DataDir, a.minRetentionDay())
+	if errLoad != nil {
+		stderrLog.Printf("failed to load aggregates from %s: %v", cfg.DataDir, errLoad)
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for day, data := range loaded {
+		if _, exists := a.days[day]; !exists {
+			a.days[day] = data
+		}
+	}
+}
+
+func (a *Aggregator) cleanupExpired() {
+	minDay := a.minRetentionDay()
+	a.mu.RLock()
+	cfg := a.cfg
+	a.mu.RUnlock()
+	removed, errCleanup := CleanupDays(cfg.DataDir, minDay)
+	if errCleanup != nil {
+		stderrLog.Printf("failed to clean up expired aggregates in %s: %v", cfg.DataDir, errCleanup)
+	} else if len(removed) > 0 {
+		stderrLog.Printf("removed %d expired aggregate file(s) older than %s", len(removed), minDay)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for day := range a.days {
+		if day < minDay {
+			delete(a.days, day)
+			delete(a.versions, day)
+			delete(a.flushed, day)
+		}
+	}
+}
+
+// flushDirty atomically writes every day with unflushed changes, then marks
+// the flushed version. Writes that arrive during a flush bump the version and
+// are picked up by the next flush.
+func (a *Aggregator) flushDirty() {
+	type daySnapshot struct {
+		data    DayData
+		version int64
+	}
+	a.mu.RLock()
+	cfg := a.cfg
+	snapshots := make([]daySnapshot, 0)
+	for day, data := range a.days {
+		if a.versions[day] > a.flushed[day] {
+			snapshots = append(snapshots, daySnapshot{data: copyDayData(data), version: a.versions[day]})
+		}
+	}
+	a.mu.RUnlock()
+
+	for _, snapshot := range snapshots {
+		if errSave := SaveDay(cfg.DataDir, snapshot.data); errSave != nil {
+			stderrLog.Printf("failed to flush aggregate for %s: %v", snapshot.data.Day, errSave)
+			continue
+		}
+		a.mu.Lock()
+		if snapshot.version > a.flushed[snapshot.data.Day] {
+			a.flushed[snapshot.data.Day] = snapshot.version
+		}
+		a.mu.Unlock()
+	}
+}
+
+// startFlusher launches the periodic flush goroutine exactly once.
+func (a *Aggregator) startFlusher() {
+	a.flushMu.Lock()
+	defer a.flushMu.Unlock()
+	if a.flushActive {
+		return
+	}
+	a.stopFlush = make(chan struct{})
+	a.flushDone = make(chan struct{})
+	a.flushActive = true
+	go func() {
+		defer close(a.flushDone)
+		ticker := time.NewTicker(flushInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				a.flushDirty()
+				a.cleanupExpired()
+			case <-a.stopFlush:
+				return
+			}
+		}
+	}()
+}
+
+// Shutdown stops the background flusher and performs a final flush. It is
+// safe to call multiple times and on a never-configured aggregator.
+func (a *Aggregator) Shutdown() {
+	a.flushMu.Lock()
+	if a.flushActive {
+		close(a.stopFlush)
+		a.flushActive = false
+	}
+	done := a.flushDone
+	a.flushDone = nil
+	a.flushMu.Unlock()
+	if done != nil {
+		<-done
+	}
+	a.flushDirty()
+}

@@ -106,7 +106,7 @@ func cliproxyPluginFree(ptr unsafe.Pointer, length C.size_t) {
 
 //export cliproxyPluginShutdown
 func cliproxyPluginShutdown() {
-	// Wired to the aggregator in a later task.
+	agg.Shutdown()
 }
 
 func handleMethod(method string, request []byte) ([]byte, error) {
