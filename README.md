@@ -1,54 +1,91 @@
 # token-usage-stats
 
-[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 的用量统计插件：按「天 × 模型」聚合 token 用量（输入、缓存命中率、输出、TPS），本地 JSON 文件持久化最近 30 天数据。
+[![CI](https://github.com/zpvan/token-usage-stats/actions/workflows/ci.yml/badge.svg)](https://github.com/zpvan/token-usage-stats/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/zpvan/token-usage-stats)](https://github.com/zpvan/token-usage-stats/releases)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/zpvan/token-usage-stats)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+A [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) plugin that aggregates per-day, per-model LLM token usage — input, cache hit rate, output and TPS (tokens/sec) — persists it to local JSON files with a 30-day retention, and serves an authenticated JSON API plus a histogram dashboard.
+
+[中文文档](README_CN.md)
 
 ![dashboard](docs/assets/dashboard.png)
 
-## 功能
+## ⚠️ Compatibility notice (read first)
 
-- 每条请求完成后自动聚合：请求数、输入 tokens（含缓存口径换算）、缓存读取/写入、缓存命中率、输出 tokens（含推理）
-- 每天一个 JSON 文件（`./token-usage-stats-data/YYYY-MM-DD.json`），保留最近 30 天（可配置 1-365），重启不丢
-- 认证 JSON API：`GET /v0/management/usage-stats`
-- 浏览器页面：`/v0/resource/plugins/token-usage-stats/stats`——每日堆叠直方图（缓存读取/非缓存输入/输出）、模型用量排行条形图 + 明细表格，亮暗双主题
+**Official CLIProxyAPI release binaries currently crash when loading any self-compiled Go plugin** — reproducible on v7.2.151 and v8.0.11 (`fatal error: unknown caller pc` / SIGSEGV inside the plugin's `dlopen`ed init, a cross-runtime cgo ABI issue between the CI-built host and the plugin runtime).
 
-## 构建
-
-需要 Go ≥ 1.23 与支持 CGO 的 C 工具链（macOS: Xcode CLT）。
+Until this is fixed upstream, you must run this plugin with a **CPA core built from source on your own machine**, matching your platform:
 
 ```bash
-make build        # 产出 bin/token-usage-stats.dylib（macOS）/ .so（Linux）
-make test         # 运行单元测试
+git clone https://github.com/router-for-me/CLIProxyAPI.git
+cd CLIProxyAPI
+go build -o cli-proxy-api ./cmd/server
 ```
 
-跨平台部署时需在目标平台重新构建。
+Use this binary in place of the release binary. A corresponding upstream issue is being prepared; this notice will be removed once plugin loading works on release binaries.
 
-## 部署
+## Features
 
-1. 把动态库拷入 CPA 的插件目录（CPA 会扫描 `<plugins.dir>/<goos>/<goarch>/` 与 `<plugins.dir>/`）：
+- **Per-day × per-model aggregation**: requests, input tokens (with cross-provider cache normalization), cache read/creation, cache hit rate, output tokens (incl. reasoning), **TPS** (output tokens per second)
+- **30-day retention**: one JSON file per day (`YYYY-MM-DD.json`), atomic writes, rolling cleanup, survives restarts
+- **Authenticated JSON API**: `GET /v0/management/usage-stats` (uses the existing management auth)
+- **Histogram dashboard**: daily stacked columns per model + per-model ranking bars + detail table, light/dark themes, no external JS dependencies
+- **Zero third-party dependencies**: pure Go standard library, single C ABI shared library
 
-   ```bash
-   make install CPA_PLUGINS_DIR=/path/to/CLIProxyAPI/plugins
-   ```
+## Installation
 
-2. 在 CPA 的 `config.yaml` 中启用：
+### From release (recommended)
 
-   ```yaml
-   plugins:
-     enabled: true
-     configs:
-       token-usage-stats:
-         enabled: true
-         data_dir: ./token-usage-stats-data   # 可选，默认此值
-         retention_days: 30                    # 可选，默认 30（1-365）
-   ```
+Download the artifact for your platform from [Releases](https://github.com/zpvan/token-usage-stats/releases):
 
-3. 重启 CPA（或触发热重载）。
+| Platform | Artifact |
+|---|---|
+| macOS Apple Silicon | `token-usage-stats-vX.Y.Z-darwin-arm64.dylib` |
+| macOS Intel | `token-usage-stats-vX.Y.Z-darwin-amd64.dylib` |
+| Linux x86_64 | `token-usage-stats-vX.Y.Z-linux-amd64.so` |
+| Linux arm64 | `token-usage-stats-vX.Y.Z-linux-arm64.so` |
 
-## 查看数据
+Copy it into the CPA plugins directory — either the arch-specific subdirectory (recommended) or the plugins root:
 
-### 浏览器页面
+```bash
+mkdir -p /path/to/cpa/plugins/darwin/arm64
+cp token-usage-stats-vX.Y.Z-darwin-arm64.dylib /path/to/cpa/plugins/darwin/arm64/
+```
 
-打开 `http://<cpa-host>:<port>/v0/resource/plugins/token-usage-stats/stats`，输入管理密码（Management Key）即可查看表格。密码仅保存在浏览器 localStorage。
+### Build from source
+
+Requires Go ≥ 1.23 and a C toolchain (macOS: Xcode CLT).
+
+```bash
+make build        # outputs bin/token-usage-stats.dylib (.so on Linux)
+make test
+make install CPA_PLUGINS_DIR=/path/to/cpa/plugins
+```
+
+Cross-platform deployment needs a build on the target platform/architecture.
+
+## Configuration
+
+Enable the plugin in CPA's `config.yaml`:
+
+```yaml
+plugins:
+  enabled: true
+  configs:
+    token-usage-stats:
+      enabled: true
+      data_dir: ./token-usage-stats-data   # optional, default shown
+      retention_days: 30                    # optional, 1-365
+```
+
+Restart CPA (or trigger a config hot reload).
+
+## Usage
+
+### Dashboard
+
+Open `http://<cpa-host>:<port>/v0/resource/plugins/token-usage-stats/stats` and enter your management key (stored in the browser's localStorage only).
 
 ### JSON API
 
@@ -57,7 +94,7 @@ curl -H "Authorization: Bearer <management-key>" \
   "http://localhost:8317/v0/management/usage-stats?from=2026-09-03&to=2026-10-02"
 ```
 
-响应示例：
+<details><summary>Example response</summary>
 
 ```json
 {
@@ -75,7 +112,10 @@ curl -H "Authorization: Bearer <management-key>" \
           "cache_hit_rate": 0.6667,
           "output_tokens": 8000,
           "reasoning_tokens": 2000,
-          "total_tokens": 128000
+          "total_tokens": 128000,
+          "decode_tokens": 8000,
+          "decode_ms": 240000,
+          "tps": 33.3
         }
       ],
       "totals": { "requests": 12, "...": "..." }
@@ -86,23 +126,30 @@ curl -H "Authorization: Bearer <management-key>" \
 }
 ```
 
-## 口径说明
+</details>
 
-- **天**：按 CPA 运行机器的本地时区划分。
-- **模型**：取请求的实际模型（`Model` → `ResponseModel` → `Alias` → `unknown`）。
-- **输入 tokens（总输入）**：不同 provider 的原始 `input_tokens` 语义不同，插件统一换算——Claude 系为 `input + cache_read + cache_creation`；OpenAI/Gemini 系的 `input_tokens` 本身已含缓存，直接使用。
-- **缓存命中率** = `cache_read_tokens / 输入 tokens`（输入为 0 时为 `null`）。
-- **输出 tokens**：Gemini 系的推理 tokens 单独上报，已并入输出总量。
-- **TPS（生成速度，tokens/秒）**：流式请求按 `输出 ÷ (Latency − TTFT)` 计算（真实吐字速度），非流式退化为 `输出 ÷ Latency`；仅统计成功且有输出的请求，无有效样本时显示 `-`。
+## Metrics semantics
 
-## 开发
+- **Day**: boundaries follow the CPA host's local timezone.
+- **Model**: the effective request model (`Model` → `ResponseModel` → `Alias` → `unknown`).
+- **Input tokens**: providers report input differently; the plugin normalizes — Claude-family: `input + cache_read + cache_creation`; OpenAI/Gemini-family already include cache tokens in `input_tokens`.
+- **Cache hit rate** = `cache_read_tokens / input_tokens` (`null` when input is 0).
+- **TPS** = output tokens ÷ generation time. Generation time is `Latency − TTFT` for streaming requests (true decode speed) and full `Latency` otherwise. Only successful requests with output count; `null` when no samples exist.
 
-纯 Go 标准库，无第三方依赖。结构：
+## Development
 
-- `main.go` — C ABI 入口、信封编解码、method 分发
-- `config.go` — 配置解析（flat-YAML 子集）
-- `register.go` — 注册与生命周期
-- `aggregator.go` — 内存聚合与 flush 生命周期
-- `store.go` — 按天 JSON 持久化
-- `api.go` — Management JSON API
-- `page.go` — 内嵌浏览器页面
+Pure Go standard library, no third-party dependencies.
+
+- `main.go` — C ABI entrypoint, envelope codec, method dispatch
+- `config.go` — flat-YAML-subset config parser
+- `register.go` — registration & lifecycle
+- `aggregator.go` — in-memory aggregation, provider token semantics, flush lifecycle
+- `store.go` — per-day JSON persistence
+- `api.go` — management JSON API
+- `page.go` — embedded dashboard
+
+CI runs `gofmt`, `go vet`, and `go test -race` on macOS and Linux; tagged releases build the four platform artifacts automatically.
+
+## License
+
+[MIT](LICENSE)
