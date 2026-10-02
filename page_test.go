@@ -18,7 +18,8 @@ func TestResourcePageServed(t *testing.T) {
 	body := string(resp.Body)
 	for _, marker := range []string{
 		"<table", "/v0/management/usage-stats", "Bearer", "localStorage", "data-days",
-		"<svg", "--series-1", "renderDailyChart", "renderModelChart", "dailyLegend",
+		"<svg", "--series-1", "--series-8", "renderDailyChart", "renderModelChart", "dailyLegend",
+		"slotFor", "modelSlots", "daySegments", "其他",
 		"每日 Tokens 直方图", "模型用量排行", "缓存读取", "tooltip", "tabular-nums",
 	} {
 		if !strings.Contains(body, marker) {

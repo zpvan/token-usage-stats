@@ -18,6 +18,8 @@ const pageHTML = `<!doctype html>
     --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #898781;
     --grid: #e1e0d9; --baseline: #c3c2b7; --border: rgba(11,11,11,0.10);
     --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
+    --series-4: #eda100; --series-5: #e87ba4; --series-6: #008300;
+    --series-7: #4a3aa7; --series-8: #e34948;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -26,6 +28,8 @@ const pageHTML = `<!doctype html>
       --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
       --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
       --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+      --series-4: #c98500; --series-5: #d55181; --series-6: #008300;
+      --series-7: #9085e9; --series-8: #e66767;
     }
   }
   body { font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; padding: 24px; background: var(--page); color: var(--ink-1); }
@@ -118,11 +122,22 @@ var API_PATH = '/v0/management/usage-stats';
 var SVGNS = 'http://www.w3.org/2000/svg';
 var currentDays = 30;
 
-var SERIES = [
-  { key: 'cacheRead', label: '缓存读取', cssVar: '--series-1' },
-  { key: 'uncached', label: '非缓存输入', cssVar: '--series-2' },
-  { key: 'output', label: '输出', cssVar: '--series-3' }
-];
+// Model colors: categorical slots 1-8 in fixed palette order, assigned once
+// per model name and never reassigned, so a model keeps its hue across days
+// and range switches. Models past the slots fold into 其他 (muted gray).
+var SLOT_MAX = 8;
+var modelSlots = {};
+var nextSlot = 0;
+function slotFor(model) {
+  if (Object.prototype.hasOwnProperty.call(modelSlots, model)) { return modelSlots[model]; }
+  if (nextSlot < SLOT_MAX) { modelSlots[model] = nextSlot; nextSlot++; return modelSlots[model]; }
+  return -1;
+}
+function slotColors() {
+  var out = [];
+  for (var i = 1; i <= SLOT_MAX; i++) { out.push(cssVar('--series-' + i)); }
+  return out;
+}
 
 function getKey() { try { return localStorage.getItem(KEY_STORAGE) || ''; } catch (e) { return ''; } }
 function setKey(k) { try { localStorage.setItem(KEY_STORAGE, k); } catch (e) {} }
@@ -258,20 +273,55 @@ function dayValues(day) {
   return { cacheRead: cacheRead, uncached: uncached, output: output, total: total, requests: requests, cacheCreation: cacheCreation };
 }
 
-function renderLegend() {
+function renderLegend(days) {
   var legend = document.getElementById('dailyLegend');
   while (legend.firstChild) { legend.removeChild(legend.firstChild); }
-  for (var i = 0; i < SERIES.length; i++) {
+  var ranked = aggregateModels(days);
+  var colors = slotColors();
+  var otherColor = cssVar('--ink-3') || '#898781';
+  var entries = [];
+  var hasOther = false;
+  for (var i = 0; i < ranked.length; i++) {
+    var slot = slotFor(ranked[i].model);
+    if (slot < 0) { hasOther = true; continue; }
+    entries.push({ label: ranked[i].model, color: colors[slot], slot: slot });
+  }
+  entries.sort(function (a, b) { return a.slot - b.slot; });
+  if (hasOther) { entries.push({ label: '其他', color: otherColor, slot: 99 }); }
+  // a single series needs no legend box: the chart title already names it
+  if (entries.length <= 1) { return; }
+  for (var j = 0; j < entries.length; j++) {
     var item = document.createElement('span');
     item.className = 'item';
     var sw = document.createElement('span');
     sw.className = 'sw';
-    sw.style.background = 'var(' + SERIES[i].cssVar + ')';
+    sw.style.background = entries[j].color;
     var tx = document.createElement('span');
-    tx.textContent = SERIES[i].label;
+    tx.textContent = entries[j].label;
     item.appendChild(sw); item.appendChild(tx);
     legend.appendChild(item);
   }
+}
+
+// daySegments splits one day's total into per-model segments ordered by
+// color slot (largest-assigned first at the bottom), with unslotted models
+// folded into a trailing 其他 segment.
+function daySegments(day) {
+  var byModel = {};
+  var other = 0;
+  var models = day.models || [];
+  for (var i = 0; i < models.length; i++) {
+    var m = models[i];
+    var slot = slotFor(m.model);
+    if (slot < 0) { other += m.total_tokens || 0; continue; }
+    if (!byModel[m.model]) { byModel[m.model] = { slot: slot, model: m.model, total: 0 }; }
+    byModel[m.model].total += m.total_tokens || 0;
+  }
+  var segs = [];
+  for (var k in byModel) { segs.push(byModel[k]); }
+  segs.sort(function (a, b) { return a.slot - b.slot; });
+  if (other > 0) { segs.push({ slot: -1, model: '其他', total: other }); }
+  return segs;
 }
 
 function renderDailyChart(days) {
@@ -286,11 +336,17 @@ function renderDailyChart(days) {
   svg.setAttribute('height', height);
   svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
 
+  // assign color slots by range total rank before stacking
+  var ranked = aggregateModels(days);
+  for (var r0 = 0; r0 < ranked.length; r0++) { slotFor(ranked[r0].model); }
+
   var maxV = 1;
   var vals = [];
+  var segList = [];
   for (var i = 0; i < days.length; i++) {
     var v = dayValues(days[i]);
     vals.push(v);
+    segList.push(daySegments(days[i]));
     if (v.total > maxV) { maxV = v.total; }
   }
   var ceil = niceCeil(maxV);
@@ -300,8 +356,8 @@ function renderDailyChart(days) {
   var gridColor = cssVar('--grid') || '#e1e0d9';
   var baseColor = cssVar('--baseline') || '#c3c2b7';
   var ink3 = cssVar('--ink-3') || '#898781';
-  var surface = cssVar('--surface-1') || '#fcfcfb';
-  var fills = [cssVar('--series-1') || '#2a78d6', cssVar('--series-2') || '#eb6834', cssVar('--series-3') || '#1baf7a'];
+  var colors = slotColors();
+  function segColor(seg) { return seg.slot < 0 ? ink3 : colors[seg.slot]; }
 
   var ticks = 4;
   for (var g = 0; g <= ticks; g++) {
@@ -314,21 +370,21 @@ function renderDailyChart(days) {
   var barW = Math.min(24, per * 0.66);
   for (var d = 0; d < days.length; d++) {
     var v = vals[d];
+    var segs = segList[d];
     var cx = padL + d * per + per / 2;
     var group = svgEl('g', {});
-    var segs = [v.cacheRead, v.uncached, v.output];
     var cum = 0;
     for (var s = 0; s < segs.length; s++) {
-      var segV = segs[s];
-      if (segV <= 0) { continue; }
-      var y0 = y(cum), y1 = y(cum + segV);
-      cum += segV;
+      var seg = segs[s];
+      if (seg.total <= 0) { continue; }
+      var y0 = y(cum), y1 = y(cum + seg.total);
+      cum += seg.total;
       var h = Math.max(y0 - y1 - 2, 0.6);
       var rect;
-      if (isLastNonZero(segs, s)) {
-        rect = svgEl('path', { d: topRoundedRect(cx - barW / 2, y1 + 1, barW, h, 4), fill: fills[s] });
+      if (s === segs.length - 1) {
+        rect = svgEl('path', { d: topRoundedRect(cx - barW / 2, y1 + 1, barW, h, 4), fill: segColor(seg) });
       } else {
-        rect = svgEl('rect', { x: cx - barW / 2, y: y1 + 1, width: barW, height: h, fill: fills[s] });
+        rect = svgEl('rect', { x: cx - barW / 2, y: y1 + 1, width: barW, height: h, fill: segColor(seg) });
       }
       group.appendChild(rect);
     }
@@ -339,11 +395,11 @@ function renderDailyChart(days) {
       function on(evt) {
         grp.setAttribute('opacity', '0.78');
         var dv = vals[idx];
-        var rows = [
-          { color: fills[0], label: '缓存读取', value: fmtNum(dv.cacheRead) },
-          { color: fills[1], label: '非缓存输入', value: fmtNum(dv.uncached) },
-          { color: fills[2], label: '输出', value: fmtNum(dv.output) }
-        ];
+        var dsegs = segList[idx];
+        var rows = [];
+        for (var si = 0; si < dsegs.length; si++) {
+          rows.push({ color: segColor(dsegs[si]), label: dsegs[si].model, value: fmtNum(dsegs[si].total) });
+        }
         var hitRate = dv.cacheRead + dv.uncached > 0 ? dv.cacheRead / (dv.cacheRead + dv.uncached) : null;
         var foot = '总计 ' + fmtNum(dv.total) + ' · 命中率 ' + fmtRate(hitRate) + ' · ' + fmtNum(dv.requests) + ' 请求';
         var px = evt && typeof evt.clientX === 'number' ? evt.clientX : grp.getBoundingClientRect().left;
@@ -360,11 +416,6 @@ function renderDailyChart(days) {
 
     svg.appendChild(svgText(cx, height - 10, 'middle', ink3, 11, days[d].day.slice(5)));
   }
-}
-
-function isLastNonZero(arr, idx) {
-  for (var i = idx + 1; i < arr.length; i++) { if (arr[i] > 0) { return false; } }
-  return true;
 }
 
 function aggregateModels(days) {
@@ -500,7 +551,7 @@ function render(data) {
   } else {
     hideMsg();
   }
-  renderLegend();
+  renderLegend(days);
   renderDailyChart(days);
   renderModelChart(days);
   var desc = days.slice().reverse();
