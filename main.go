@@ -110,8 +110,9 @@ func cliproxyPluginShutdown() {
 }
 
 func handleMethod(method string, request []byte) ([]byte, error) {
-	_ = request
 	switch method {
+	case "plugin.register", "plugin.reconfigure":
+		return handleRegister(request)
 	default:
 		return errorEnvelope("unknown_method", "unknown method: "+method), nil
 	}
