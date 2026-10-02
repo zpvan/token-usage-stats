@@ -56,10 +56,10 @@ func seedStats(t *testing.T) {
 		Detail: UsageDetail{InputTokens: 300, CacheReadTokens: 100, OutputTokens: 100}})
 	a.Add(UsageRecord{Provider: "claude", Model: "claude-opus-4-5", RequestedAt: localTime(2026, 10, 2, 10),
 		Latency: 2 * time.Second,
-		Detail: UsageDetail{InputTokens: 100, CacheReadTokens: 40, CacheCreationTokens: 10, OutputTokens: 50}})
+		Detail:  UsageDetail{InputTokens: 100, CacheReadTokens: 40, CacheCreationTokens: 10, OutputTokens: 50}})
 	a.Add(UsageRecord{Provider: "openai", Model: "gpt-5", RequestedAt: localTime(2026, 10, 1, 9),
 		Latency: time.Second,
-		Detail: UsageDetail{InputTokens: 60, OutputTokens: 40}})
+		Detail:  UsageDetail{InputTokens: 60, OutputTokens: 40}})
 }
 
 func TestHandleManagementRegister(t *testing.T) {
