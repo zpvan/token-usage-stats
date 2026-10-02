@@ -100,7 +100,7 @@ const pageHTML = `<!doctype html>
       <thead>
         <tr>
           <th class="l">日期</th><th class="l">模型</th><th>请求数</th><th>输入 tokens</th>
-          <th>缓存读取</th><th>命中率</th><th>输出 tokens</th><th>总计</th>
+          <th>缓存读取</th><th>命中率</th><th>输出 tokens</th><th>TPS</th><th>总计</th>
         </tr>
       </thead>
       <tbody id="rows"></tbody>
@@ -159,6 +159,11 @@ function fmtDate(d) {
 }
 function fmtNum(n) { return (n == null ? 0 : n).toLocaleString('en-US'); }
 function fmtRate(r) { return r == null ? '-' : (r * 100).toFixed(1) + '%'; }
+function fmtTps(t) { return t == null ? '-' : Number(t).toFixed(1); }
+function tpsOf(decodeTokens, decodeMs) {
+  if (!decodeMs || decodeMs <= 0 || !decodeTokens || decodeTokens <= 0) { return null; }
+  return decodeTokens * 1000 / decodeMs;
+}
 function fmtCompact(n) {
   if (n == null) { n = 0; }
   if (n < 1000) { return String(Math.round(n)); }
@@ -257,7 +262,7 @@ function rightRoundedRect(x, y, w, h, r) {
 }
 
 function dayValues(day) {
-  var cacheRead = 0, uncached = 0, output = 0, total = 0, requests = 0, cacheCreation = 0;
+  var cacheRead = 0, uncached = 0, output = 0, total = 0, requests = 0, cacheCreation = 0, decodeTokens = 0, decodeMs = 0;
   var models = day.models || [];
   for (var i = 0; i < models.length; i++) {
     var m = models[i];
@@ -266,11 +271,13 @@ function dayValues(day) {
     total += m.total_tokens || 0;
     requests += m.requests || 0;
     cacheCreation += m.cache_creation_tokens || 0;
+    decodeTokens += m.decode_tokens || 0;
+    decodeMs += m.decode_ms || 0;
     var input = m.input_tokens || 0;
     var cr = m.cache_read_tokens || 0;
     uncached += Math.max(input - cr, 0);
   }
-  return { cacheRead: cacheRead, uncached: uncached, output: output, total: total, requests: requests, cacheCreation: cacheCreation };
+  return { cacheRead: cacheRead, uncached: uncached, output: output, total: total, requests: requests, cacheCreation: cacheCreation, decodeTokens: decodeTokens, decodeMs: decodeMs };
 }
 
 function renderLegend(days) {
@@ -401,7 +408,7 @@ function renderDailyChart(days) {
           rows.push({ color: segColor(dsegs[si]), label: dsegs[si].model, value: fmtNum(dsegs[si].total) });
         }
         var hitRate = dv.cacheRead + dv.uncached > 0 ? dv.cacheRead / (dv.cacheRead + dv.uncached) : null;
-        var foot = '总计 ' + fmtNum(dv.total) + ' · 命中率 ' + fmtRate(hitRate) + ' · ' + fmtNum(dv.requests) + ' 请求';
+        var foot = '总计 ' + fmtNum(dv.total) + ' · 命中率 ' + fmtRate(hitRate) + ' · TPS ' + fmtTps(tpsOf(dv.decodeTokens, dv.decodeMs)) + ' · ' + fmtNum(dv.requests) + ' 请求';
         var px = evt && typeof evt.clientX === 'number' ? evt.clientX : grp.getBoundingClientRect().left;
         var py = evt && typeof evt.clientY === 'number' ? evt.clientY : grp.getBoundingClientRect().top;
         showTooltip(px, py, days[idx].day, rows, foot);
@@ -426,7 +433,7 @@ function aggregateModels(days) {
       var m = models[j];
       var e = map[m.model];
       if (!e) {
-        e = { model: m.model, requests: 0, input: 0, cacheRead: 0, cacheCreation: 0, output: 0, total: 0 };
+        e = { model: m.model, requests: 0, input: 0, cacheRead: 0, cacheCreation: 0, output: 0, total: 0, decodeTokens: 0, decodeMs: 0 };
         map[m.model] = e;
       }
       e.requests += m.requests || 0;
@@ -435,6 +442,8 @@ function aggregateModels(days) {
       e.cacheCreation += m.cache_creation_tokens || 0;
       e.output += m.output_tokens || 0;
       e.total += m.total_tokens || 0;
+      e.decodeTokens += m.decode_tokens || 0;
+      e.decodeMs += m.decode_ms || 0;
     }
   }
   var arr = [];
@@ -449,7 +458,7 @@ function renderModelChart(days) {
   var models = aggregateModels(days);
   var folded = null;
   if (models.length > 8) {
-    folded = { model: '其他', requests: 0, input: 0, cacheRead: 0, cacheCreation: 0, output: 0, total: 0, folded: true };
+    folded = { model: '其他', requests: 0, input: 0, cacheRead: 0, cacheCreation: 0, output: 0, total: 0, decodeTokens: 0, decodeMs: 0, folded: true };
     for (var i = 8; i < models.length; i++) {
       folded.requests += models[i].requests;
       folded.input += models[i].input;
@@ -457,6 +466,8 @@ function renderModelChart(days) {
       folded.cacheCreation += models[i].cacheCreation;
       folded.output += models[i].output;
       folded.total += models[i].total;
+      folded.decodeTokens += models[i].decodeTokens;
+      folded.decodeMs += models[i].decodeMs;
     }
     models = models.slice(0, 8);
     models.push(folded);
@@ -498,7 +509,7 @@ function renderModelChart(days) {
           { color: cssVar('--series-3'), label: '输出', value: fmtNum(entry.output) }
         ];
         var hitRate = entry.input > 0 ? entry.cacheRead / entry.input : null;
-        var foot = '总计 ' + fmtNum(entry.total) + ' · 命中率 ' + fmtRate(hitRate) + ' · ' + fmtNum(entry.requests) + ' 请求';
+        var foot = '总计 ' + fmtNum(entry.total) + ' · 命中率 ' + fmtRate(hitRate) + ' · TPS ' + fmtTps(tpsOf(entry.decodeTokens, entry.decodeMs)) + ' · ' + fmtNum(entry.requests) + ' 请求';
         var px = evt && typeof evt.clientX === 'number' ? evt.clientX : 100;
         var py = evt && typeof evt.clientY === 'number' ? evt.clientY : 100;
         showTooltip(px, py, entry.folded ? '其他（合并模型）' : entry.model, rows, foot);
@@ -572,7 +583,7 @@ function appendRow(tbody, cls, dayText, modelText, c) {
   if (cls) { tr.className = cls; }
   var cells = [dayText, modelText, fmtNum(c.requests), fmtNum(c.input_tokens),
     fmtNum(c.cache_read_tokens), fmtRate(c.cache_hit_rate),
-    fmtNum(c.output_tokens), fmtNum(c.total_tokens)];
+    fmtNum(c.output_tokens), fmtTps(c.tps), fmtNum(c.total_tokens)];
   for (var i = 0; i < cells.length; i++) {
     var td = document.createElement('td');
     td.textContent = cells[i];

@@ -83,6 +83,9 @@ type statsCounters struct {
 	OutputTokens        int64    `json:"output_tokens"`
 	ReasoningTokens     int64    `json:"reasoning_tokens"`
 	TotalTokens         int64    `json:"total_tokens"`
+	DecodeTokens        int64    `json:"decode_tokens"`
+	DecodeMs            int64    `json:"decode_ms"`
+	Tps                 *float64 `json:"tps"`
 }
 
 type modelReport struct {
@@ -116,6 +119,16 @@ func cacheHitRate(cacheRead, input int64) *float64 {
 	return &rate
 }
 
+// tokensPerSecond returns decode tokens per second rounded to 1 decimal, or
+// nil when no decode samples exist.
+func tokensPerSecond(decodeTokens, decodeMs int64) *float64 {
+	if decodeMs <= 0 || decodeTokens <= 0 {
+		return nil
+	}
+	tps := math.Round(float64(decodeTokens)*1000/float64(decodeMs)*10) / 10
+	return &tps
+}
+
 func countersOf(stats *ModelStats) statsCounters {
 	return statsCounters{
 		Requests:            stats.Requests,
@@ -127,6 +140,9 @@ func countersOf(stats *ModelStats) statsCounters {
 		OutputTokens:        stats.OutputTokens,
 		ReasoningTokens:     stats.ReasoningTokens,
 		TotalTokens:         stats.TotalTokens,
+		DecodeTokens:        stats.DecodeTokens,
+		DecodeMs:            stats.DecodeMs,
+		Tps:                 tokensPerSecond(stats.DecodeTokens, stats.DecodeMs),
 	}
 }
 
@@ -139,7 +155,10 @@ func accumulateTotals(dst *statsCounters, src statsCounters) {
 	dst.OutputTokens += src.OutputTokens
 	dst.ReasoningTokens += src.ReasoningTokens
 	dst.TotalTokens += src.TotalTokens
+	dst.DecodeTokens += src.DecodeTokens
+	dst.DecodeMs += src.DecodeMs
 	dst.CacheHitRate = cacheHitRate(dst.CacheReadTokens, dst.InputTokens)
+	dst.Tps = tokensPerSecond(dst.DecodeTokens, dst.DecodeMs)
 }
 
 // parseDateRange resolves the from/to query parameters (YYYY-MM-DD). The

@@ -152,6 +152,71 @@ func TestAddZeroRequestedAtUsesNowFunc(t *testing.T) {
 	statsOf(t, a, "2026-10-02", "gpt-5")
 }
 
+func TestAddTpsDecodeTime(t *testing.T) {
+	a := newTestAggregator()
+	base := UsageRecord{
+		Provider: "openai", Model: "gpt-5", RequestedAt: localTime(2026, 10, 2, 10),
+		Detail: UsageDetail{InputTokens: 100, OutputTokens: 50},
+	}
+
+	// streaming: decode = latency - ttft = 3000ms - 500ms = 2500ms
+	streaming := base
+	streaming.Latency = 3 * time.Second
+	streaming.TTFT = 500 * time.Millisecond
+	a.Add(streaming)
+	ms := statsOf(t, a, "2026-10-02", "gpt-5")
+	if ms.DecodeMs != 2500 || ms.DecodeTokens != 50 {
+		t.Fatalf("streaming decode = %dms/%dtok, want 2500ms/50tok", ms.DecodeMs, ms.DecodeTokens)
+	}
+
+	// non-streaming: ttft is zero, decode falls back to latency = 2000ms
+	nonStreaming := base
+	nonStreaming.Latency = 2 * time.Second
+	a.Add(nonStreaming)
+	if ms.DecodeMs != 4500 || ms.DecodeTokens != 100 {
+		t.Fatalf("after non-streaming = %dms/%dtok, want 4500ms/100tok", ms.DecodeMs, ms.DecodeTokens)
+	}
+
+	// failed requests never contribute decode samples
+	failed := base
+	failed.Failed = true
+	failed.Latency = 9 * time.Second
+	a.Add(failed)
+	if ms.DecodeMs != 4500 || ms.DecodeTokens != 100 {
+		t.Fatalf("failed request leaked into decode: %dms/%dtok", ms.DecodeMs, ms.DecodeTokens)
+	}
+
+	// zero-output requests never contribute decode samples
+	noOutput := base
+	noOutput.Detail.OutputTokens = 0
+	noOutput.Latency = 9 * time.Second
+	a.Add(noOutput)
+	if ms.DecodeMs != 4500 || ms.DecodeTokens != 100 {
+		t.Fatalf("zero-output request leaked into decode: %dms/%dtok", ms.DecodeMs, ms.DecodeTokens)
+	}
+
+	// zero-latency requests contribute nothing either
+	noTiming := base
+	a.Add(noTiming)
+	if ms.DecodeMs != 4500 || ms.DecodeTokens != 100 {
+		t.Fatalf("zero-latency request leaked into decode: %dms/%dtok", ms.DecodeMs, ms.DecodeTokens)
+	}
+}
+
+func TestAddTpsOddTimings(t *testing.T) {
+	a := newTestAggregator()
+	// ttft >= latency (degenerate): falls back to full latency
+	a.Add(UsageRecord{
+		Provider: "openai", Model: "gpt-5", RequestedAt: localTime(2026, 10, 2, 10),
+		Latency: time.Second, TTFT: 1500 * time.Millisecond,
+		Detail: UsageDetail{InputTokens: 10, OutputTokens: 10},
+	})
+	ms := statsOf(t, a, "2026-10-02", "gpt-5")
+	if ms.DecodeMs != 1000 || ms.DecodeTokens != 10 {
+		t.Fatalf("degenerate timing = %dms/%dtok, want 1000ms/10tok", ms.DecodeMs, ms.DecodeTokens)
+	}
+}
+
 func TestSnapshotRangeSortAndDeepCopy(t *testing.T) {
 	a := newTestAggregator()
 	for _, day := range []string{"2026-10-02", "2026-10-01", "2026-09-30", "2026-10-05"} {

@@ -52,10 +52,13 @@ func seedStats(t *testing.T) {
 	t.Helper()
 	a := agg
 	a.Add(UsageRecord{Provider: "openai", Model: "gpt-5", RequestedAt: localTime(2026, 10, 2, 9),
+		Latency: 4 * time.Second, TTFT: time.Second,
 		Detail: UsageDetail{InputTokens: 300, CacheReadTokens: 100, OutputTokens: 100}})
 	a.Add(UsageRecord{Provider: "claude", Model: "claude-opus-4-5", RequestedAt: localTime(2026, 10, 2, 10),
+		Latency: 2 * time.Second,
 		Detail: UsageDetail{InputTokens: 100, CacheReadTokens: 40, CacheCreationTokens: 10, OutputTokens: 50}})
 	a.Add(UsageRecord{Provider: "openai", Model: "gpt-5", RequestedAt: localTime(2026, 10, 1, 9),
+		Latency: time.Second,
 		Detail: UsageDetail{InputTokens: 60, OutputTokens: 40}})
 }
 
@@ -141,6 +144,17 @@ func TestUsageStatsAggregationAndSorting(t *testing.T) {
 	if second["input_tokens"].(float64) != 150 {
 		t.Fatalf("claude input = %v", second["input_tokens"])
 	}
+	// tps: gpt-5 = 100 tok / 3000ms = 33.3; claude = 50 tok / 2000ms = 25.0
+	if first["tps"].(float64) != 33.3 {
+		t.Fatalf("gpt-5 tps = %v, want 33.3", first["tps"])
+	}
+	if second["tps"].(float64) != 25.0 {
+		t.Fatalf("claude tps = %v, want 25.0", second["tps"])
+	}
+	// day totals tps: (100+50) tok / (3000+2000)ms = 30.0
+	if day2["totals"].(map[string]any)["tps"].(float64) != 30.0 {
+		t.Fatalf("day tps = %v, want 30.0", day2["totals"].(map[string]any)["tps"])
+	}
 	// per-day totals present
 	if day2["totals"].(map[string]any)["requests"].(float64) != 2 {
 		t.Fatalf("day totals = %v", day2["totals"])
@@ -153,6 +167,10 @@ func TestUsageStatsAggregationAndSorting(t *testing.T) {
 	// overall hit rate: (100+40)/510 rounded to 4 decimals
 	if totals["cache_hit_rate"].(float64) != 0.2745 {
 		t.Fatalf("overall hit rate = %v", totals["cache_hit_rate"])
+	}
+	// overall tps: (100+50+40) tok / (3000+2000+1000)ms = 31.7
+	if totals["tps"].(float64) != 31.7 {
+		t.Fatalf("overall tps = %v, want 31.7", totals["tps"])
 	}
 }
 
@@ -209,7 +227,13 @@ func TestUsageStatsNullHitRate(t *testing.T) {
 	if !exists || rate != nil {
 		t.Fatalf("cache_hit_rate = %v (exists=%v), want explicit null", rate, exists)
 	}
+	if tps, existsTps := model["tps"]; !existsTps || tps != nil {
+		t.Fatalf("tps = %v (exists=%v), want explicit null", tps, existsTps)
+	}
 	if !strings.Contains(string(resp.Body), `"cache_hit_rate":null`) {
 		t.Fatal("null hit rate must serialize explicitly")
+	}
+	if !strings.Contains(string(resp.Body), `"tps":null`) {
+		t.Fatal("null tps must serialize explicitly")
 	}
 }

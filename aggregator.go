@@ -64,6 +64,8 @@ type UsageRecord struct {
 	Alias         string
 	ResponseModel string
 	RequestedAt   time.Time
+	Latency       time.Duration
+	TTFT          time.Duration
 	Failed        bool
 	Detail        UsageDetail
 }
@@ -78,6 +80,11 @@ type ModelStats struct {
 	OutputTokens        int64 `json:"output_tokens"`
 	ReasoningTokens     int64 `json:"reasoning_tokens"`
 	TotalTokens         int64 `json:"total_tokens"`
+	// DecodeTokens and DecodeMs feed the TPS (tokens per second) figure:
+	// TPS = DecodeTokens / (DecodeMs/1000). Only successful requests with
+	// output contribute samples.
+	DecodeTokens int64 `json:"decode_tokens"`
+	DecodeMs     int64 `json:"decode_ms"`
 }
 
 // DayData is the per-day aggregate document persisted to disk.
@@ -194,7 +201,26 @@ func (a *Aggregator) Add(rec UsageRecord) {
 	stats.OutputTokens += totalOutput
 	stats.ReasoningTokens += reasoning
 	stats.TotalTokens += totalInput + totalOutput
+	if decodeMs := decodeMillis(rec); decodeMs > 0 && totalOutput > 0 {
+		stats.DecodeTokens += totalOutput
+		stats.DecodeMs += decodeMs
+	}
 	a.versions[day]++
+}
+
+// decodeMillis returns the generation (decode) time of one request in
+// milliseconds: latency minus TTFT for streaming requests, full latency when
+// TTFT is unavailable or degenerate. Failed or untimed requests yield 0.
+func decodeMillis(rec UsageRecord) int64 {
+	if rec.Failed || rec.Latency <= 0 {
+		return 0
+	}
+	latMs := rec.Latency.Milliseconds()
+	ttftMs := rec.TTFT.Milliseconds()
+	if ttftMs > 0 && latMs > ttftMs {
+		return latMs - ttftMs
+	}
+	return latMs
 }
 
 // Snapshot returns deep copies of the aggregated days within [from, to]

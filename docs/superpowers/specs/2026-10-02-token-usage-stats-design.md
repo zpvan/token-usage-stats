@@ -167,6 +167,8 @@ plugins:
 | `output_tokens` | int64 | 输出总量（含推理） |
 | `reasoning_tokens` | int64 | 输出中的推理部分 |
 | `total_tokens` | int64 | `input_tokens + output_tokens` |
+| `decode_tokens` | int64 | 参与 TPS 统计的输出 tokens（仅成功且有输出的请求） |
+| `decode_ms` | int64 | 生成（decode）耗时毫秒数（同上口径） |
 
 ### 4.3 缓存命中率口径（关键）
 
@@ -182,6 +184,7 @@ plugins:
 注意：匹配顺序为 openai-compat → claude/anthropic → gemini 系 → openai 系 → unknown（与 CPA 一致）。
 
 - **缓存命中率 = `cache_read_tokens / input_tokens`**（换算后的总输入；为 0 时输出 `null`）
+- **TPS（tokens/秒）= `decode_tokens / (decode_ms / 1000)`**：decode 耗时 = 流式请求 `Latency − TTFT`，非流式或 TTFT 异常时退化为 `Latency`；仅统计**成功且输出 > 0** 的请求；无有效计时样本时输出 `null`；保留 1 位小数
 - 单条记录换算时各分量先 clamp 到 ≥ 0 再累加
 
 ### 4.4 输出 tokens 口径

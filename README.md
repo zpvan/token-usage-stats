@@ -91,6 +91,7 @@ curl -H "Authorization: Bearer <management-key>" \
 - **输入 tokens（总输入）**：不同 provider 的原始 `input_tokens` 语义不同，插件统一换算——Claude 系为 `input + cache_read + cache_creation`；OpenAI/Gemini 系的 `input_tokens` 本身已含缓存，直接使用。
 - **缓存命中率** = `cache_read_tokens / 输入 tokens`（输入为 0 时为 `null`）。
 - **输出 tokens**：Gemini 系的推理 tokens 单独上报，已并入输出总量。
+- **TPS（生成速度，tokens/秒）**：流式请求按 `输出 ÷ (Latency − TTFT)` 计算（真实吐字速度），非流式退化为 `输出 ÷ Latency`；仅统计成功且有输出的请求，无有效样本时显示 `-`。
 
 ## 开发
 

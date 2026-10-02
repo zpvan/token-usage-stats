@@ -21,6 +21,7 @@ func TestResourcePageServed(t *testing.T) {
 		"<svg", "--series-1", "--series-8", "renderDailyChart", "renderModelChart", "dailyLegend",
 		"slotFor", "modelSlots", "daySegments", "其他",
 		"每日 Tokens 直方图", "模型用量排行", "缓存读取", "tooltip", "tabular-nums",
+		"fmtTps", "tpsOf", "TPS",
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("page missing marker %q", marker)
