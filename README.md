@@ -1,6 +1,8 @@
 # token-usage-stats
 
-[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 的用量统计插件：按「天 × 模型」聚合 token 用量（输入、缓存命中率、输出），本地 JSON 文件持久化最近 30 天数据。
+[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 的用量统计插件：按「天 × 模型」聚合 token 用量（输入、缓存命中率、输出、TPS），本地 JSON 文件持久化最近 30 天数据。
+
+![dashboard](docs/assets/dashboard.png)
 
 ## 功能
 
