@@ -16,7 +16,11 @@ func TestResourcePageServed(t *testing.T) {
 		t.Fatalf("Content-Type = %v", contentType)
 	}
 	body := string(resp.Body)
-	for _, marker := range []string{"<table", "/v0/management/usage-stats", "Bearer", "localStorage", "data-days"} {
+	for _, marker := range []string{
+		"<table", "/v0/management/usage-stats", "Bearer", "localStorage", "data-days",
+		"<svg", "--series-1", "renderDailyChart", "renderModelChart", "dailyLegend",
+		"每日 Tokens 直方图", "模型用量排行", "缓存读取", "tooltip", "tabular-nums",
+	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("page missing marker %q", marker)
 		}

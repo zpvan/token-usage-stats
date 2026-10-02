@@ -271,10 +271,13 @@ GET /v0/management/usage-stats?from=YYYY-MM-DD&to=YYYY-MM-DD
 - 页面行为：
   1. 首次打开弹窗输入管理密码（Management Key），存 `localStorage`；提供「清除密码」按钮
   2. JS 用 `Authorization: Bearer <key>` fetch `/v0/management/usage-stats?from=&to=`；401 时提示密码错误并允许重输
-  3. 表格列：**日期 | 模型 | 请求数 | 输入 tokens | 缓存读取 | 命中率 | 输出 tokens | 总计**
+  3. **每日 Tokens 直方图**：按天堆叠柱状图（SVG 手绘，无框架），分段为 缓存读取 / 非缓存输入 / 输出（categorical 三色，固定顺序），legend + 每柱 hover tooltip（含总计与命中率）
+  4. **模型用量排行**：横向条形图（total tokens 降序，单色蓝，>8 个模型折叠为「其他」），条端标注紧凑数值，hover 显示完整明细
+  5. 明细表格列：**日期 | 模型 | 请求数 | 输入 tokens | 缓存读取 | 命中率 | 输出 tokens | 总计**
      （`cache_creation_tokens`/`reasoning_tokens`/`failed_requests` 只在 JSON 中，不上表格）
-  4. 日期倒序展示；每天一个「当日小计」行；页面底部全范围合计行
-  5. 范围切换按钮：近 7 / 14 / 30 天（默认 30）；数字千分位格式化；命中率显示百分比（`null` 显示 `-`）
+  6. 图表按时间升序、表格日期倒序；每天一个「当日小计」行；页面底部全范围合计行
+  7. 范围切换按钮：近 7 / 14 / 30 天（默认 30），作用于所有图表与表格；数字千分位格式化（tooltip/表格）与紧凑格式（坐标轴/条端，K/M）；命中率显示百分比（`null` 显示 `-`）
+  8. 配色遵循 dataviz 规范：categorical slots 1–3（蓝/橙/青），亮暗双主题均通过 CVD 校验；refetch 时保留旧帧降透明度
 - 页面不内嵌任何数据，静态壳本身无认证也无可泄露信息
 
 ## 7. 配置项
