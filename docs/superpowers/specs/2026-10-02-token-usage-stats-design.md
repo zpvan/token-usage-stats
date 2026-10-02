@@ -15,7 +15,7 @@ CLIProxyAPI（下称 CPA）目前没有「按天聚合 + 持久化」的 token �
 - 数据**持久化到本地 JSON 文件**，保留最近 **30 天**（可配置），重启不丢
 - 两种查看方式：
   - **认证 JSON API**：`GET /v0/management/usage-stats`（走 CPA 现有管理认证）
-  - **浏览器页面**：`/v0/resource/plugins/token-usage-stats/`（静态页壳 + JS 带管理密码拉取 JSON API）
+  - **浏览器页面**：`/v0/resource/plugins/token-usage-stats/stats`（静态页壳 + JS 带管理密码拉取 JSON API）
 
 ### 非目标（YAGNI）
 
@@ -43,7 +43,7 @@ CPA host ──RPC──▶ usage.handle（每条请求一条 UsageRecord）
         ▼                                ▼
  management.handle              management.handle
  GET /v0/management/            GET /v0/resource/plugins/
-   usage-stats（Bearer 认证）      token-usage-stats/（静态页壳）
+   usage-stats（Bearer 认证）      token-usage-stats/stats（静态页壳）
         ▼                                │
       JSON ◀──────── fetch(Bearer) ──────┘ 页面本身无数据，JS 带 key 拉 JSON
 ```
@@ -117,13 +117,13 @@ method 调用与响应均为 JSON 信封：`{"ok": bool, "result": ..., "error":
     {"Method": "GET", "Path": "/usage-stats", "Description": "Daily per-model token usage statistics"}
   ],
   "resources": [
-    {"Path": "/", "Menu": "Usage Stats", "Description": "Daily per-model token usage page"}
+    {"Path": "/stats", "Menu": "Usage Stats", "Description": "Daily per-model token usage page"}
   ]
 }
 ```
 
 - `routes[].Path` 解析到 `/v0/management/` 前缀下 → 实际端点 `GET /v0/management/usage-stats`，host 会先做管理认证（`Authorization: Bearer <key>` 或 `X-Management-Key`）再转发插件。
-- `resources[].Path` 解析到 `/v0/resource/plugins/<pluginID>/` 前缀下 → 实际端点 `GET /v0/resource/plugins/token-usage-stats/`，**无管理认证**（仅 GET）。
+- `resources[].Path` 解析到 `/v0/resource/plugins/<pluginID>/` 前缀下 → 实际端点 `GET /v0/resource/plugins/token-usage-stats/stats`，**无管理认证**（仅 GET）。注意：host 对 resource 路径做 `TrimRight("/")` 且拒绝空路径，因此必须注册非根路径（`/stats`），不能注册 `/`。
 - host 按「HTTP 方法 + 完整请求路径」精确匹配路由。
 
 **`management.handle`**
@@ -267,7 +267,7 @@ GET /v0/management/usage-stats?from=YYYY-MM-DD&to=YYYY-MM-DD
 
 ### 6.2 浏览器页面
 
-- `GET /v0/resource/plugins/token-usage-stats/` → `200 text/html; charset=utf-8`，单文件 HTML（内联 CSS/JS，无外部依赖、无框架）
+- `GET /v0/resource/plugins/token-usage-stats/stats` → `200 text/html; charset=utf-8`，单文件 HTML（内联 CSS/JS，无外部依赖、无框架）
 - 页面行为：
   1. 首次打开弹窗输入管理密码（Management Key），存 `localStorage`；提供「清除密码」按钮
   2. JS 用 `Authorization: Bearer <key>` fetch `/v0/management/usage-stats?from=&to=`；401 时提示密码错误并允许重输
@@ -338,7 +338,7 @@ Makefile 目标：
 2. 拷入 CPA `plugins/darwin/arm64/`，config.yaml 启用插件
 3. 启动 CPA，经代理发若干请求（至少覆盖 claude / openai / gemini 各一）
 4. `curl -H "Authorization: Bearer <key>" localhost:8317/v0/management/usage-stats` 验证聚合数字与口径
-5. 浏览器打开 `/v0/resource/plugins/token-usage-stats/`，输密码看表格
+5. 浏览器打开 `/v0/resource/plugins/token-usage-stats/stats`，输密码看表格
 6. 重启 CPA 后数据仍在；构造 31 天前文件验证被清理
 
 ## 11. 风险与备注
