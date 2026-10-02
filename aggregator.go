@@ -317,11 +317,13 @@ func (a *Aggregator) startFlusher() {
 	if a.flushActive {
 		return
 	}
-	a.stopFlush = make(chan struct{})
-	a.flushDone = make(chan struct{})
+	stopFlush := make(chan struct{})
+	flushDone := make(chan struct{})
+	a.stopFlush = stopFlush
+	a.flushDone = flushDone
 	a.flushActive = true
 	go func() {
-		defer close(a.flushDone)
+		defer close(flushDone) // local capture: Shutdown may clear the fields
 		ticker := time.NewTicker(flushInterval)
 		defer ticker.Stop()
 		for {
@@ -329,7 +331,7 @@ func (a *Aggregator) startFlusher() {
 			case <-ticker.C:
 				a.flushDirty()
 				a.cleanupExpired()
-			case <-a.stopFlush:
+			case <-stopFlush:
 				return
 			}
 		}
