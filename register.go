@@ -42,9 +42,10 @@ func registrationPayload() registration {
 	return registration{
 		SchemaVersion: schemaVersion,
 		Metadata: registrationMetadata{
-			Name:    pluginName,
-			Version: pluginVersion,
-			Author:  pluginAuthor,
+			Name:             pluginName,
+			Version:          pluginVersion,
+			Author:           pluginAuthor,
+			GitHubRepository: "https://github.com/zpvan/token-usage-stats",
 			ConfigFields: []configField{
 				{Name: "data_dir", Type: "string", Description: "Directory for daily JSON aggregate files (default ./token-usage-stats-data)"},
 				{Name: "retention_days", Type: "integer", Description: "Days of daily aggregates to retain (default 30, range 1-365)"},

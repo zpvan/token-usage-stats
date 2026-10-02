@@ -16,7 +16,7 @@ build: $(BIN)
 
 $(BIN): $(wildcard *.go)
 	mkdir -p bin
-	go build -buildmode=c-shared -o $(BIN) .
+	go build -buildmode=c-shared -gcflags="all=-l -N" -o $(BIN) .
 	rm -f bin/token-usage-stats.h
 
 test:

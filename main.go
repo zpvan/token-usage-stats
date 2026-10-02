@@ -33,6 +33,26 @@ typedef struct {
 extern int cliproxyPluginCall(char*, uint8_t*, size_t, cliproxy_buffer*);
 extern void cliproxyPluginFree(void*, size_t);
 extern void cliproxyPluginShutdown(void);
+
+// C trampolines: the function pointers stored in the plugin api struct must
+// point into C code, not Go-exported code, for the host's dlsym-based calls
+// to use a stable calling convention across runtimes.
+static int trampoline_call(char* method, uint8_t* request, size_t request_len, cliproxy_buffer* response) {
+	return cliproxyPluginCall(method, request, request_len, response);
+}
+static void trampoline_free(void* ptr, size_t len) {
+	cliproxyPluginFree(ptr, len);
+}
+static void trampoline_shutdown(void) {
+	cliproxyPluginShutdown();
+}
+
+static void fill_plugin_api(cliproxy_plugin_api* plugin) {
+	plugin->abi_version = 1;
+	plugin->call = trampoline_call;
+	plugin->free_buffer = trampoline_free;
+	plugin->shutdown = trampoline_shutdown;
+}
 */
 import "C"
 
@@ -66,10 +86,7 @@ func cliproxy_plugin_init(host *C.cliproxy_host_api, plugin *C.cliproxy_plugin_a
 		return 1
 	}
 	_ = host // this plugin makes no host callbacks
-	plugin.abi_version = C.uint32_t(abiVersion)
-	plugin.call = C.cliproxy_plugin_call_fn(C.cliproxyPluginCall)
-	plugin.free_buffer = C.cliproxy_plugin_free_fn(C.cliproxyPluginFree)
-	plugin.shutdown = C.cliproxy_plugin_shutdown_fn(C.cliproxyPluginShutdown)
+	C.fill_plugin_api(plugin)
 	return 0
 }
 
