@@ -113,6 +113,10 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 	switch method {
 	case "plugin.register", "plugin.reconfigure":
 		return handleRegister(request)
+	case "management.register":
+		return handleManagementRegister()
+	case "management.handle":
+		return handleManagement(request)
 	default:
 		return errorEnvelope("unknown_method", "unknown method: "+method), nil
 	}
