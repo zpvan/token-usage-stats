@@ -22,6 +22,12 @@ func TestResourcePageServed(t *testing.T) {
 		"slotFor", "modelSlots", "daySegments", "其他",
 		"每日 Tokens 直方图", "模型用量排行", "缓存读取", "tooltip", "tabular-nums",
 		"fmtTps", "tpsOf", "TPS",
+		"--surface-2", "[data-theme=\"white\"]", "[data-theme=\"dark\"]",
+		"cli-proxy-theme", "token-usage-stats.theme", "data-theme",
+		"THEME_LOCAL_KEY", "THEME_CPA_KEY", "readCpaTheme", "resolveTheme", "applyTheme",
+		"themeSel", "onThemeChanged", "lastData",
+		"跟随 CPA", "跟随系统", "纯白", "羊毛纸", "暗色",
+		"prefers-color-scheme",
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("page missing marker %q", marker)

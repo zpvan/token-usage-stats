@@ -81,6 +81,38 @@ const pageHTML = `<!doctype html>
   .dialog p { font-size: 13px; color: var(--ink-2); margin: 0 0 12px; }
   .dialog input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; margin-bottom: 12px; background: var(--page); color: var(--ink-1); }
 </style>
+<script>
+// 主题:优先跟随 CPA Management Center(localStorage["cli-proxy-theme"],
+// zustand persist JSON,theme 取值 auto|light|white|dark);
+// 本页 localStorage["token-usage-stats.theme"] 可覆盖,取值 cpa|auto|white|light|dark。
+// auto 解析与 CPA 一致:系统暗 → dark,系统亮 → white(永不落到羊毛纸)。
+// 在 <head> 内同步执行,先于 body 渲染,避免主题闪烁。
+var THEME_LOCAL_KEY = 'token-usage-stats.theme';
+var THEME_CPA_KEY = 'cli-proxy-theme';
+function getLocalTheme() {
+  try { return localStorage.getItem(THEME_LOCAL_KEY) || 'cpa'; } catch (e) { return 'cpa'; }
+}
+function readCpaTheme() {
+  try {
+    var raw = localStorage.getItem(THEME_CPA_KEY);
+    if (!raw) { return 'auto'; }
+    var v = JSON.parse(raw);
+    v = v && v.state && v.state.theme;
+    return (v === 'auto' || v === 'white' || v === 'light' || v === 'dark') ? v : 'auto';
+  } catch (e) { return 'auto'; }
+}
+function resolveTheme(pref) {
+  var t = pref === 'cpa' ? readCpaTheme() : pref;
+  if (t === 'auto') {
+    return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'white';
+  }
+  return (t === 'white' || t === 'light' || t === 'dark') ? t : 'white';
+}
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', resolveTheme(getLocalTheme()));
+}
+applyTheme();
+</script>
 </head>
 <body>
 <h1>Token Usage Stats（按天 × 模型）</h1>
@@ -89,6 +121,13 @@ const pageHTML = `<!doctype html>
   <button data-days="14">近 14 天</button>
   <button data-days="30" class="active">近 30 天</button>
   <span class="spacer"></span>
+  <select id="themeSel" aria-label="主题">
+    <option value="cpa">跟随 CPA</option>
+    <option value="auto">跟随系统</option>
+    <option value="white">纯白</option>
+    <option value="light">羊毛纸</option>
+    <option value="dark">暗色</option>
+  </select>
   <button id="clearKey">清除密码</button>
   <button id="reload">刷新</button>
 </div>
@@ -132,6 +171,7 @@ var KEY_STORAGE = 'token-usage-stats.management-key';
 var API_PATH = '/v0/management/usage-stats';
 var SVGNS = 'http://www.w3.org/2000/svg';
 var currentDays = 30;
+var lastData = null;
 
 // Model colors: categorical slots 1-8 in fixed palette order, assigned once
 // per model name and never reassigned, so a model keeps its hue across days
@@ -565,6 +605,7 @@ function load() {
 }
 
 function render(data) {
+  lastData = data;
   var days = (data && data.days) || [];
   var tbody = document.getElementById('rows');
   while (tbody.firstChild) { tbody.removeChild(tbody.firstChild); }
@@ -627,6 +668,28 @@ for (var bi = 0; bi < rangeButtons.length; bi++) {
     this.className = 'active';
     currentDays = parseInt(this.getAttribute('data-days'), 10);
     load();
+  });
+}
+// 主题联动:切换器写本地覆盖;同源 iframe 场景下 CPA 改主题触发 storage 事件,
+// 仅当本地覆盖为 cpa 时跟随;系统主题变化仅当当前路径经过 auto 时重算。
+// 图表颜色取自 CSS 变量,主题变化后用缓存数据重绘。
+function onThemeChanged() {
+  applyTheme();
+  if (lastData) { render(lastData); }
+}
+var themeSel = document.getElementById('themeSel');
+themeSel.value = getLocalTheme();
+themeSel.addEventListener('change', function () {
+  try { localStorage.setItem(THEME_LOCAL_KEY, themeSel.value); } catch (e) {}
+  onThemeChanged();
+});
+window.addEventListener('storage', function (e) {
+  if (e.key === THEME_CPA_KEY && getLocalTheme() === 'cpa') { onThemeChanged(); }
+});
+if (window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+    var pref = getLocalTheme();
+    if (pref === 'auto' || (pref === 'cpa' && readCpaTheme() === 'auto')) { onThemeChanged(); }
   });
 }
 load();
