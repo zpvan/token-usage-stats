@@ -11,26 +11,36 @@ const pageHTML = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Token Usage Stats</title>
 <style>
-  :root { color-scheme: light; }
   * { box-sizing: border-box; }
+  /* 调色板与 CLIProxyAPI Management Center 对齐(themes.scss):
+     :root = 羊毛纸(默认浅色);[data-theme="white"] = 纯白;[data-theme="dark"] = 暗色。
+     data-theme 由 <head> 内主题脚本设置;羊毛纸不设 CSS 块,即 :root 默认值。 */
   :root {
-    --page: #f9f9f7; --surface-1: #fcfcfb;
-    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #898781;
-    --grid: #e1e0d9; --baseline: #c3c2b7; --border: rgba(11,11,11,0.10);
+    color-scheme: light;
+    --page: #faf9f5; --surface-1: #f0eee8; --surface-2: #e9e6df;
+    --ink-1: #2d2a26; --ink-2: #6d6760; --ink-3: #a29c95;
+    --grid: #e3e1db; --baseline: #d5d2cb; --border: rgba(45,42,38,0.10);
     --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
     --series-4: #eda100; --series-5: #e87ba4; --series-6: #008300;
     --series-7: #4a3aa7; --series-8: #e34948;
+    --msg-err-bg: rgba(198,87,70,0.12); --msg-err-fg: #c65746;
+    --msg-info-bg: rgba(139,134,128,0.14); --msg-info-fg: #6d6760;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-      --page: #0d0d0d; --surface-1: #1a1a19;
-      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
-      --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
-      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
-      --series-4: #c98500; --series-5: #d55181; --series-6: #008300;
-      --series-7: #9085e9; --series-8: #e66767;
-    }
+  [data-theme="white"] {
+    --page: #ffffff; --surface-1: #ffffff; --surface-2: #f6f6f6;
+    --grid: #e5e5e5; --baseline: #d9d9d9;
+    --msg-err-bg: rgba(198,87,70,0.10);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --page: #151412; --surface-1: #1d1b18; --surface-2: #262320;
+    --ink-1: #f6f4f1; --ink-2: #c9c3bb; --ink-3: #9c958d;
+    --grid: #3a3530; --baseline: #4a453f; --border: rgba(246,244,241,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+    --series-4: #c98500; --series-5: #d55181; --series-6: #008300;
+    --series-7: #9085e9; --series-8: #e66767;
+    --msg-err-bg: rgba(198,87,70,0.18);
+    --msg-info-bg: rgba(139,134,128,0.20); --msg-info-fg: #c9c3bb;
   }
   body { font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; padding: 24px; background: var(--page); color: var(--ink-1); }
   h1 { font-size: 20px; margin: 0 0 16px; }
@@ -38,8 +48,9 @@ const pageHTML = `<!doctype html>
   .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
   .toolbar .spacer { flex: 1; }
   button { padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--ink-1); cursor: pointer; font-size: 13px; }
-  button:hover { background: var(--grid); }
+  button:hover { background: var(--surface-2); }
   button.active { background: var(--series-1); border-color: var(--series-1); color: #fff; }
+  select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--ink-1); font-size: 13px; }
   .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
   .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
   .legend { display: flex; gap: 14px; align-items: center; }
@@ -51,11 +62,11 @@ const pageHTML = `<!doctype html>
   th, td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
   th { color: var(--ink-2); font-weight: 600; }
   td.l, th.l { text-align: left; }
-  tr.sub td { background: var(--grid); font-weight: 600; }
+  tr.sub td { background: var(--surface-2); font-weight: 600; }
   tr.grand td { font-weight: 700; border-top: 2px solid var(--baseline); }
   .msg { padding: 12px 16px; border-radius: 6px; margin-bottom: 12px; display: none; }
-  .msg.err { display: block; background: #fee4e2; color: #b42318; }
-  .msg.info { display: block; background: #e0eaff; color: #1d4ed8; }
+  .msg.err { display: block; background: var(--msg-err-bg); color: var(--msg-err-fg); }
+  .msg.info { display: block; background: var(--msg-info-bg); color: var(--msg-info-fg); }
   #content { transition: opacity .15s ease; }
   .tooltip { position: absolute; z-index: 50; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.16); padding: 8px 10px; font-size: 12px; min-width: 150px; }
   .tt-title { font-weight: 600; margin-bottom: 6px; color: var(--ink-1); }
