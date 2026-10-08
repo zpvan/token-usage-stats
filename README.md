@@ -25,6 +25,8 @@ go build -o cli-proxy-api ./cmd/server
 
 Use this binary in place of the release binary. A corresponding upstream issue is being prepared; this notice will be removed once plugin loading works on release binaries.
 
+If a launcher (e.g. EasyCLIProxyAPI) auto-updates the core and overwrites your source-built binary, `make install-local-core` rebuilds the core from `CPA_SRC_DIR` (default `../CLIProxyAPI`), backs up the existing binary, and installs it together with the plugin into `CPA_CORE_DIR`.
+
 ## Features
 
 - **Per-day × per-model aggregation**: requests, input tokens (with cross-provider cache normalization), cache read/creation, cache hit rate, output tokens (incl. reasoning), **TPS** (output tokens per second)

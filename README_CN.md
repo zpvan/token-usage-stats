@@ -25,6 +25,8 @@ go build -o cli-proxy-api ./cmd/server
 
 用该二进制替换 release 版 core（注意架构匹配）。上游 issue 准备中，修复后此提示将移除。
 
+如果启动器（如 EasyCLIProxyAPI）自动更新 core 覆盖了本地构建的二进制，可运行 `make install-local-core`：从 `CPA_SRC_DIR`（默认 `../CLIProxyAPI`）重新构建 core、备份现有二进制，并连同本插件一起装入 `CPA_CORE_DIR`。
+
 ## 功能
 
 - 每条请求完成后自动聚合：请求数、输入 tokens（含缓存口径换算）、缓存读取/写入、缓存命中率、输出 tokens（含推理）
