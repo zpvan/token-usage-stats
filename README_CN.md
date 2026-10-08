@@ -30,7 +30,7 @@ go build -o cli-proxy-api ./cmd/server
 - 每条请求完成后自动聚合：请求数、输入 tokens（含缓存口径换算）、缓存读取/写入、缓存命中率、输出 tokens（含推理）
 - 每天一个 JSON 文件（`./token-usage-stats-data/YYYY-MM-DD.json`），保留最近 30 天（可配置 1-365），重启不丢
 - 认证 JSON API：`GET /v0/management/usage-stats`
-- 浏览器页面：`/v0/resource/plugins/token-usage-stats/stats`——每日堆叠直方图（缓存读取/非缓存输入/输出）、模型用量排行条形图 + 明细表格，亮暗双主题
+- 浏览器页面：`/v0/resource/plugins/token-usage-stats/stats`——每日堆叠直方图（缓存读取/非缓存输入/输出）、模型用量排行条形图 + 明细表格，四套主题与 CLIProxyAPI 管理界面一致（跟随系统/纯白/羊毛纸/暗色，同源时自动跟随管理界面主题）
 
 ## 安装
 

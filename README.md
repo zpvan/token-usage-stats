@@ -30,7 +30,7 @@ Use this binary in place of the release binary. A corresponding upstream issue i
 - **Per-day × per-model aggregation**: requests, input tokens (with cross-provider cache normalization), cache read/creation, cache hit rate, output tokens (incl. reasoning), **TPS** (output tokens per second)
 - **30-day retention**: one JSON file per day (`YYYY-MM-DD.json`), atomic writes, rolling cleanup, survives restarts
 - **Authenticated JSON API**: `GET /v0/management/usage-stats` (uses the existing management auth)
-- **Histogram dashboard**: daily stacked columns per model + per-model ranking bars + detail table, light/dark themes, no external JS dependencies
+- **Histogram dashboard**: daily stacked columns per model + per-model ranking bars + detail table, four themes matching the CLIProxyAPI Management Center (follow system / pure white / wool paper / dark, auto-follows the management UI when same-origin), no external JS dependencies
 - **Zero third-party dependencies**: pure Go standard library, single C ABI shared library
 
 ## Installation
