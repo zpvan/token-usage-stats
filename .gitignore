@@ -1,3 +1,4 @@
 bin/
 token-usage-stats-data/
 *.test
+docs/superpowers/
