@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestModelChartUsesSharedModelColors(t *testing.T) {
+	start := strings.Index(pageHTML, "function renderModelChart(days) {")
+	if start < 0 {
+		t.Fatal("model chart renderer not found")
+	}
+	end := strings.Index(pageHTML[start:], "\nfunction load()")
+	if end < 0 {
+		t.Fatal("model chart renderer end not found")
+	}
+	chart := pageHTML[start : start+end]
+	for _, marker := range []string{"var colors = slotColors()", "var slot = slotFor(e.model)", "colors[slot]"} {
+		if !strings.Contains(chart, marker) {
+			t.Errorf("model chart does not use the daily chart's model color mapping: missing %q", marker)
+		}
+	}
+}
+
 func TestResourcePageServed(t *testing.T) {
 	resetAggregatorForTest(t)
 	resp := callManagement(t, managementRequest{Method: "GET", Path: "/v0/resource/plugins/token-usage-stats/stats"})

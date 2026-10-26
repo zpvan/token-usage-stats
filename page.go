@@ -536,6 +536,7 @@ function renderModelChart(days) {
   var ink2 = cssVar('--ink-2') || '#52514e';
   var ink3 = cssVar('--ink-3') || '#898781';
   var fill = cssVar('--series-1') || '#2a78d6';
+  var colors = slotColors();
   var plotW = width - padL - padR;
 
   for (var r = 0; r < models.length; r++) {
@@ -545,7 +546,8 @@ function renderModelChart(days) {
     svg.appendChild(svgText(padL - 10, rowY + rowH / 2 + 4, 'end', ink2, 12, name));
     var bw = Math.max(plotW * e.total / maxV, e.total > 0 ? 2 : 0);
     if (bw > 0) {
-      var barColor = e.folded ? ink3 : fill;
+      var slot = slotFor(e.model);
+      var barColor = e.folded || slot < 0 ? ink3 : colors[slot];
       svg.appendChild(svgEl('path', { d: rightRoundedRect(padL, rowY + (rowH - 18) / 2, bw, 18, 4), fill: barColor }));
     }
     svg.appendChild(svgText(padL + bw + 6, rowY + rowH / 2 + 4, 'start', ink2, 12, fmtCompact(e.total)));
